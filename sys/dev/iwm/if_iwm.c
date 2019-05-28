@@ -793,9 +793,85 @@ iwm_read_firmware(struct iwm_softc *sc)
 			break;
 		}
 
-		case 48: /* undocumented TLV */
+		case IWM_UCODE_TLV_INIT_EVTLOG_PTR:
+			if (tlv_len != sizeof(uint32_t)) {
+				error = EINVAL;
+				device_printf(sc->sc_dev,
+				    "%s: IWM_UCODE_TLV_INIT_EVTLOG_PTR: "
+				    "tlv_len (%u) < sizeof(uint32_t)\n",
+				    __func__, tlv_len);
+				goto parse_out;
+			}
+			sc->sc_fw.init_evtlog_ptr =
+			    le32_to_cpup((const uint32_t *)tlv_data);
+			break;
+
+		case IWM_UCODE_TLV_INIT_EVTLOG_SIZE:
+			if (tlv_len != sizeof(uint32_t)) {
+				error = EINVAL;
+				device_printf(sc->sc_dev,
+				    "%s: IWM_UCODE_TLV_INIT_EVTLOG_SIZE: "
+				    "tlv_len (%u) < sizeof(uint32_t)\n",
+				    __func__, tlv_len);
+				goto parse_out;
+			}
+			sc->sc_fw.init_evtlog_size =
+			    le32_to_cpup((const uint32_t *)tlv_data);
+			break;
+
+		case IWM_UCODE_TLV_INIT_ERRLOG_PTR:
+			if (tlv_len != sizeof(uint32_t)) {
+				error = EINVAL;
+				device_printf(sc->sc_dev,
+				    "%s: IWM_UCODE_TLV_INIT_ERRLOG_PTR: "
+				    "tlv_len (%u) < sizeof(uint32_t)\n",
+				    __func__, tlv_len);
+				goto parse_out;
+			}
+			sc->sc_fw.init_errlog_ptr =
+			    le32_to_cpup((const uint32_t *)tlv_data);
+			break;
+
+		case IWM_UCODE_TLV_RUNT_EVTLOG_PTR:
+			if (tlv_len != sizeof(uint32_t)) {
+				error = EINVAL;
+				device_printf(sc->sc_dev,
+				    "%s: IWM_UCODE_TLV_RUNT_EVTLOG_PTR: "
+				    "tlv_len (%u) < sizeof(uint32_t)\n",
+				    __func__, tlv_len);
+				goto parse_out;
+			}
+			sc->sc_fw.runt_evtlog_ptr =
+			    le32_to_cpup((const uint32_t *)tlv_data);
+			break;
+
+		case IWM_UCODE_TLV_RUNT_EVTLOG_SIZE:
+			if (tlv_len != sizeof(uint32_t)) {
+				error = EINVAL;
+				device_printf(sc->sc_dev,
+				    "%s: IWM_UCODE_TLV_RUNT_EVTLOG_SIZE: "
+				    "tlv_len (%u) < sizeof(uint32_t)\n",
+				    __func__, tlv_len);
+				goto parse_out;
+			}
+			sc->sc_fw.runt_evtlog_size =
+			    le32_to_cpup((const uint32_t *)tlv_data);
+			break;
+
+		case IWM_UCODE_TLV_RUNT_ERRLOG_PTR:
+			if (tlv_len != sizeof(uint32_t)) {
+				error = EINVAL;
+				device_printf(sc->sc_dev,
+				    "%s: IWM_UCODE_TLV_RUNT_ERRLOG_PTR: "
+				    "tlv_len (%u) < sizeof(uint32_t)\n",
+				    __func__, tlv_len);
+				goto parse_out;
+			}
+			sc->sc_fw.runt_errlog_ptr =
+			    le32_to_cpup((const uint32_t *)tlv_data);
+			break;
+
 		case IWM_UCODE_TLV_SDIO_ADMA_ADDR:
-		case IWM_UCODE_TLV_FW_GSCAN_CAPA:
 			/* ignore, not used by current driver */
 			break;
 
@@ -859,15 +935,23 @@ iwm_read_firmware(struct iwm_softc *sc)
 			    le32toh(((const uint32_t *)tlv_data)[2]));
 			break;
 
+		case IWM_UCODE_TLV_FW_DBG_DEST:
+		case IWM_UCODE_TLV_FW_DBG_CONF:
+		case IWM_UCODE_TLV_FW_DBG_TRIGGER:
+		case IWM_UCODE_TLV_FW_GSCAN_CAPA:
 		case IWM_UCODE_TLV_FW_MEM_SEG:
+		case IWM_UCODE_TLV_IML:
+		case IWM_UCODE_TLV_UMAC_DEBUG_ADDRS:
+		case IWM_UCODE_TLV_LMAC_DEBUG_ADDRS:
+		case IWM_UCODE_TLV_FW_RECOVERY_INFO:
+		case IWM_UCODE_TLV_FW_FSEQ_VERSION:
+			/* XXX-BZ Not implemented yet. */
 			break;
 
 		default:
 			device_printf(sc->sc_dev,
-			    "%s: unknown firmware section %d, abort\n",
+			    "%s: unknown firmware section %d, skip\n",
 			    __func__, tlv_type);
-			error = EINVAL;
-			goto parse_out;
 		}
 	}
 
@@ -1651,7 +1735,7 @@ iwm_trans_pcie_fw_alive(struct iwm_softc *sc, uint32_t scd_base_addr)
 	iwm_nic_unlock(sc);
 
 	/* Enable L1-Active */
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000) {
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000) {
 		iwm_clear_bits_prph(sc, IWM_APMG_PCIDEV_STT_REG,
 		    IWM_APMG_PCIDEV_STT_VAL_L1_ACT_DIS);
 	}
@@ -2069,7 +2153,7 @@ static int
 iwm_get_sku(const struct iwm_softc *sc, const uint16_t *nvm_sw,
 	    const uint16_t *phy_sku)
 {
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000)
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000)
 		return le16_to_cpup(nvm_sw + IWM_SKU);
 
 	return le32_to_cpup((const uint32_t *)(phy_sku + IWM_SKU_8000));
@@ -2078,7 +2162,7 @@ iwm_get_sku(const struct iwm_softc *sc, const uint16_t *nvm_sw,
 static int
 iwm_get_nvm_version(const struct iwm_softc *sc, const uint16_t *nvm_sw)
 {
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000)
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000)
 		return le16_to_cpup(nvm_sw + IWM_NVM_VERSION);
 	else
 		return le32_to_cpup((const uint32_t *)(nvm_sw +
@@ -2089,7 +2173,7 @@ static int
 iwm_get_radio_cfg(const struct iwm_softc *sc, const uint16_t *nvm_sw,
 		  const uint16_t *phy_sku)
 {
-        if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000)
+        if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000)
                 return le16_to_cpup(nvm_sw + IWM_RADIO_CFG);
 
         return le32_to_cpup((const uint32_t *)(phy_sku + IWM_RADIO_CFG_8000));
@@ -2100,7 +2184,7 @@ iwm_get_n_hw_addrs(const struct iwm_softc *sc, const uint16_t *nvm_sw)
 {
 	int n_hw_addr;
 
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000)
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000)
 		return le16_to_cpup(nvm_sw + IWM_N_HW_ADDRS);
 
 	n_hw_addr = le32_to_cpup((const uint32_t *)(nvm_sw + IWM_N_HW_ADDRS_8000));
@@ -2112,7 +2196,7 @@ static void
 iwm_set_radio_cfg(const struct iwm_softc *sc, struct iwm_nvm_data *data,
 		  uint32_t radio_cfg)
 {
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000) {
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000) {
 		data->radio_cfg_type = IWM_NVM_RF_CFG_TYPE_MSK(radio_cfg);
 		data->radio_cfg_step = IWM_NVM_RF_CFG_STEP_MSK(radio_cfg);
 		data->radio_cfg_dash = IWM_NVM_RF_CFG_DASH_MSK(radio_cfg);
@@ -2138,7 +2222,7 @@ iwm_set_hw_address(struct iwm_softc *sc, struct iwm_nvm_data *data,
 		iwm_set_hw_address_from_csr(sc, data);
         } else
 #endif
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000) {
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000) {
 		const uint8_t *hw_addr = (const uint8_t *)(nvm_hw + IWM_HW_ADDR);
 
 		/* The byte order is little endian 16 bit, meaning 214365 */
@@ -2170,7 +2254,7 @@ iwm_parse_nvm_data(struct iwm_softc *sc,
 	uint32_t sku, radio_cfg;
 	uint16_t lar_config;
 
-	if (sc->cfg->device_family != IWM_DEVICE_FAMILY_8000) {
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000) {
 		data = malloc(sizeof(*data) +
 		    IWM_NUM_CHANNELS * sizeof(uint16_t),
 		    M_DEVBUF, M_NOWAIT | M_ZERO);
@@ -2194,7 +2278,7 @@ iwm_parse_nvm_data(struct iwm_softc *sc,
 
 	data->n_hw_addrs = iwm_get_n_hw_addrs(sc, nvm_sw);
 
-	if (sc->cfg->device_family == IWM_DEVICE_FAMILY_8000) {
+	if (sc->cfg->device_family >= IWM_DEVICE_FAMILY_8000) { /* TODO: use IWL_NVM_EXT */
 		uint16_t lar_offset = data->nvm_version < 0xE39 ?
 				       IWM_NVM_LAR_OFFSET_8000_OLD :
 				       IWM_NVM_LAR_OFFSET_8000;
@@ -2242,7 +2326,7 @@ iwm_parse_nvm_sections(struct iwm_softc *sc, struct iwm_nvm_section *sections)
 			    "Can't parse empty OTP/NVM sections\n");
 			return NULL;
 		}
-	} else if (sc->cfg->device_family == IWM_DEVICE_FAMILY_8000) {
+	} else if (sc->cfg->device_family >= IWM_DEVICE_FAMILY_8000) {
 		/* SW and REGULATORY sections are mandatory */
 		if (!sections[IWM_NVM_SECTION_TYPE_SW].data ||
 		    !sections[IWM_NVM_SECTION_TYPE_REGULATORY].data) {
@@ -2508,17 +2592,13 @@ static int
 iwm_pcie_load_cpu_sections(struct iwm_softc *sc,
 	const struct iwm_fw_img *image, int cpu, int *first_ucode_section)
 {
-	int shift_param;
 	int i, ret = 0;
 	uint32_t last_read_idx = 0;
 
-	if (cpu == 1) {
-		shift_param = 0;
+	if (cpu == 1)
 		*first_ucode_section = 0;
-	} else {
-		shift_param = 16;
+	else
 		(*first_ucode_section)++;
-	}
 
 	for (i = *first_ucode_section; i < IWM_UCODE_SECTION_MAX; i++) {
 		last_read_idx = i;
@@ -2597,6 +2677,7 @@ iwm_pcie_load_given_ucode_8000(struct iwm_softc *sc,
 	IWM_DPRINTF(sc, IWM_DEBUG_RESET, "working with %s CPU\n",
 		    image->is_dual_cpus ? "Dual" : "Single");
 
+	iwm_write_prph(sc, IWM_WFPM_GP2, 0x01010101);
 	/* configure the ucode to be ready to get the secured image */
 	/* release CPU reset */
 	if (iwm_nic_lock(sc)) {
@@ -2672,7 +2753,7 @@ iwm_start_fw(struct iwm_softc *sc, const struct iwm_fw_img *fw)
 	IWM_WRITE(sc, IWM_CSR_UCODE_DRV_GP1_CLR, IWM_CSR_UCODE_SW_BIT_RFKILL);
 
 	/* Load the given image to the HW */
-	if (sc->cfg->device_family == IWM_DEVICE_FAMILY_8000)
+	if (sc->cfg->device_family >= IWM_DEVICE_FAMILY_8000)
 		ret = iwm_pcie_load_given_ucode_8000(sc, fw);
 	else
 		ret = iwm_pcie_load_given_ucode(sc, fw);
@@ -2823,7 +2904,7 @@ iwm_mvm_load_ucode_wait_alive(struct iwm_softc *sc,
 				      IWM_MVM_UCODE_ALIVE_TIMEOUT);
 	IWM_LOCK(sc);
 	if (error) {
-		if (sc->cfg->device_family == IWM_DEVICE_FAMILY_8000) {
+		if (sc->cfg->device_family >= IWM_DEVICE_FAMILY_8000) {
 			uint32_t a = 0x5a5a5a5a, b = 0x5a5a5a5a;
 			if (iwm_nic_lock(sc)) {
 				a = iwm_read_prph(sc, IWM_SB_CPU_1_STATUS);
@@ -2924,12 +3005,13 @@ iwm_run_init_mvm_ucode(struct iwm_softc *sc, int justnvm)
 		IEEE80211_ADDR_COPY(sc->sc_ic.ic_macaddr, sc->nvm_data->hw_addr);
 		goto error;
 	}
-
-	ret = iwm_send_bt_init_conf(sc);
-	if (ret) {
-		device_printf(sc->sc_dev,
+	if (sc->cfg->device_family < IWM_DEVICE_FAMILY_8000) {
+		ret = iwm_send_bt_init_conf(sc);
+		if (ret) {
+			device_printf(sc->sc_dev,
 		    "failed to send bt coex configuration: %d\n", ret);
-		goto error;
+			goto error;
+		}
 	}
 
 	/* Send TX valid antennas before triggering calibrations */
@@ -4454,7 +4536,7 @@ iwm_mvm_is_lar_supported(struct iwm_softc *sc)
 	 * Enable LAR only if it is supported by the FW (TLV) &&
 	 * enabled in the NVM
 	 */
-	if (sc->cfg->device_family == IWM_DEVICE_FAMILY_8000)
+	if (sc->cfg->device_family >= IWM_DEVICE_FAMILY_8000)
 		return nvm_lar && tlv_lar;
 	else
 		return tlv_lar;
@@ -5021,7 +5103,15 @@ iwm_nic_error(struct iwm_softc *sc)
 
 	device_printf(sc->sc_dev, "dumping device error log\n");
 	base = sc->error_event_table[0];
-	if (base < 0x800000) {
+
+	if (sc->cur_ucode == IWM_UCODE_INIT) {
+		if (!base)
+			base = sc->sc_fw.init_errlog_ptr;
+	} else {
+		if (!base)
+			base = sc->sc_fw.runt_errlog_ptr;
+	}
+	if (base < 0x400000) {
 		device_printf(sc->sc_dev,
 		    "Invalid error log pointer 0x%08x\n", base);
 		return;
@@ -5621,6 +5711,7 @@ iwm_intr(void *arg)
 #define	PCI_PRODUCT_INTEL_WL_8260_1	0x24f3
 #define	PCI_PRODUCT_INTEL_WL_8260_2	0x24f4
 #define	PCI_PRODUCT_INTEL_WL_8265_1	0x24fd
+#define	PCI_PRODUCT_INTEL_WL_9560_1	0x9df0
 
 static const struct iwm_devices {
 	uint16_t		device;
@@ -5638,6 +5729,7 @@ static const struct iwm_devices {
 	{ PCI_PRODUCT_INTEL_WL_8260_1, &iwm8260_cfg },
 	{ PCI_PRODUCT_INTEL_WL_8260_2, &iwm8260_cfg },
 	{ PCI_PRODUCT_INTEL_WL_8265_1, &iwm8265_cfg },
+	{ PCI_PRODUCT_INTEL_WL_9560_1, &iwm9560_cfg },
 };
 
 static int
@@ -5804,7 +5896,7 @@ iwm_attach(device_t dev)
 	 * "dash" value). To keep hw_rev backwards compatible - we'll store it
 	 * in the old format.
 	 */
-	if (sc->cfg->device_family == IWM_DEVICE_FAMILY_8000) {
+	if (sc->cfg->device_family >= IWM_DEVICE_FAMILY_8000) {
 		int ret;
 		uint32_t hw_step;
 

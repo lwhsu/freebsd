@@ -202,6 +202,12 @@ struct iwm_fw_info {
 	struct iwm_ucode_capabilities ucode_capa;
 
 	uint32_t phy_config;
+	uint32_t init_evtlog_ptr;
+	uint32_t init_evtlog_size;
+	uint32_t init_errlog_ptr;
+	uint32_t runt_evtlog_ptr;
+	uint32_t runt_evtlog_size;
+	uint32_t runt_errlog_ptr;
 	uint8_t valid_tx_ant;
 	uint8_t valid_rx_ant;
 };
